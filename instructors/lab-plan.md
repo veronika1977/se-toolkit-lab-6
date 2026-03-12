@@ -1,12 +1,12 @@
 # Lab plan — Build Your Own Agent
 
 **Topic:** Agent loop, LLM tool calling, CLI development, course review
-**Date:** 2026-03-11
+**Date:** 2026-03-12
 
 ## Main goals
 
 - Demystify the agent loop by building one from scratch.
-- Reinforce understanding of all course material (labs 1-6) through an evaluation benchmark.
+- Reinforce understanding of all course material (labs 1-6) through a wiki-based agent and evaluation benchmark.
 - Teach LLM API integration and tool calling as a transferable skill.
 
 ## Learning outcomes
@@ -31,60 +31,58 @@ In simple words:
 
 ## Lab story
 
-You have a running Learning Management Service from the previous lab — a backend, a database full of analytics data, and a frontend dashboard. The course is ending and you need to review everything you have learned. Instead of reviewing manually, you will build a CLI agent that answers questions about the course and about your own system, evaluated against a hidden benchmark — like building an algorithm against a test suite.
+You have a running Learning Management Service from the previous lab — a backend, a database full of analytics data, and a frontend dashboard. Your project has a wiki full of documentation that nobody reads. You will build a CLI agent that reads the docs for you, answers questions about the course, and then connects to the live system to do something actually useful — analyze logs and diagnose bugs.
 
 A senior engineer explains the assignment:
 
-> 1. Build a CLI that takes a question, calls an LLM, and returns a JSON answer — the basic agent loop.
-> 2. Give the agent tools to read your codebase and query your API — so it can answer questions about your actual system.
-> 3. Iterate until the agent passes the evaluation benchmark — each failure teaches you something about agents or course material.
+> 1. Build an agent that reads the project wiki and answers questions by finding the right section — the documentation agent.
+> 2. Connect the agent to your live system so it can query the API, inspect the codebase, and answer questions about the actual deployment — the system agent.
+> 3. Polish the agent until it passes the full evaluation benchmark, including diagnosing bugs from application logs — the reliable agent.
 
 ## Required tasks
 
-### Task 1 — Call an LLM from Code
+### Task 1 — The Documentation Agent
 
 **Purpose:**
 
-Build the foundation — a working CLI that calls an LLM and returns structured answers.
+Build an agent that answers questions by navigating the project wiki, finding the relevant section, and providing the answer — learning the agentic loop, tool calling, and CLI design in the process.
 
 **Summary:**
 
-Students create `agent.py` in the project root. The CLI accepts a plain string question as a command-line argument and outputs a JSON object with `answer` and `tool_calls` fields to stdout. All debug output goes to stderr.
+Students create `agent.py` in the project root. The CLI takes a question as a command-line argument and outputs JSON with three fields: `answer` (the text answer), `source` (the wiki section reference), and `tool_calls` (the tools used). An agent is a program that uses an LLM with tools to accomplish tasks. The agent must use `read_file` and `list_files` tools to navigate the `wiki/` directory, find the section that answers the question, and return both the answer and the source reference.
 
-Students choose an LLM provider (OpenRouter recommended for zero-cost access) and write a system prompt with course knowledge. The system prompt is the primary way the agent answers tier 1 questions that require no tools. Students write a plan before coding, document their architecture in AGENT.md, and create five regression tests.
+Students choose an LLM provider (OpenRouter recommended), set up tool calling (verified during setup), and implement the agentic loop: call the LLM with tool definitions, execute any tool calls, feed results back, repeat until the LLM produces a final answer. The wiki section makes the output deterministic — students can verify their own answers by reading the section.
 
-The agent must work on the VM via SSH. At this stage, `tool_calls` is always an empty array because no tools are implemented yet.
+Students write a plan before coding, document their architecture in AGENT.md, and create regression tests. The benchmark tests ~15 wiki questions with deterministic expected sections.
 
 **Acceptance criteria:**
 
-- `agent.py` runs on the VM and exits with code 0.
-- Output is valid JSON with `answer` and `tool_calls` fields.
-- Plan and documentation files are committed before the agent code.
-- At least five regression tests pass.
+- `agent.py` returns JSON with `answer`, `source`, and `tool_calls` fields.
+- The agent uses `read_file` and `list_files` tools to navigate the wiki.
+- The `source` field correctly identifies the wiki section that answers the question.
+- The benchmark passes all wiki questions locally.
 - PR is approved and merged, closing the linked issue.
 
 ---
 
-### Task 2 — Add Tools
+### Task 2 — The System Agent
 
 **Purpose:**
 
-Implement the agentic loop with tools that let the agent inspect its own codebase and query the running API.
+Connect the agent to the live system so it can query the API, inspect source code, and answer questions about the actual deployment.
 
 **Summary:**
 
-Students implement three tools: `read_file` (reads a file from the project directory), `list_files` (lists directory contents), and `query_api` (makes HTTP requests to the deployed backend). Each tool is defined as a JSON schema in the `tools` parameter of the LLM API request.
+Students add a `query_api` tool that makes HTTP requests to the deployed backend, authenticating with `LMS_API_KEY`. The agent can now answer two kinds of questions: static system facts (framework, ports, ORM — deterministic, baked into code) and data-dependent queries (item count, scores — verified by range checks).
 
-Students build the agentic loop: call the LLM, check if it requests a tool call, execute the tool, send the result back as a `tool` role message, and repeat until the LLM produces a final text answer. A maximum of 10 iterations prevents infinite loops. File tools are restricted to the project directory for security. The `query_api` tool authenticates using `LMS_API_KEY` from the environment.
-
-Students update their plan, documentation, and tests. The agent must handle tool-based evaluation questions.
+Students extend the system prompt to help the LLM decide when to use wiki tools vs system tools. They update documentation and tests to cover the new tool. The benchmark adds ~11 system questions on top of the existing wiki questions.
 
 **Acceptance criteria:**
 
-- All three tools are implemented and appear in the agent's tool schemas.
-- The agentic loop executes tool calls and feeds results back to the LLM.
-- Tool-based evaluation questions return correct answers.
-- At least five new regression tests verify tool usage.
+- The `query_api` tool is implemented and authenticates with the backend.
+- The agent answers static system questions correctly (framework, ports, status codes).
+- The agent answers data-dependent questions with plausible values.
+- The benchmark passes all wiki and system questions locally.
 - PR is approved and merged, closing the linked issue.
 
 ---
@@ -93,22 +91,22 @@ Students update their plan, documentation, and tests. The agent must handle tool
 
 **Purpose:**
 
-Iterate on the agent until it passes the full evaluation benchmark, learning course material and agent debugging along the way.
+Iterate on the agent until it passes the full evaluation benchmark, including hidden questions that require chaining tools to diagnose bugs from application logs.
 
 **Summary:**
 
-Students run `python run_eval.py` to test their agent against 25 questions fetched from the autochecker API. The script stops at the first failure, showing the question, the agent's answer, and the expected match criteria. Students diagnose each failure (wrong knowledge, missing tool call, broken tool, bad prompt phrasing) and fix it.
+Students run `python run_eval.py` to test against local questions, then submit to the autochecker bot which tests additional hidden questions. Hidden questions include multi-step challenges: find an error in the application logs, trace it to the source file, and suggest a fix. These require chaining tools (query logs → read source → reason about fix).
 
-Common fixes include expanding the system prompt, improving tool descriptions so the LLM calls the right tool, fixing tool implementations, and handling edge cases. Students document their initial score, diagnosis of failures, and iteration strategy in a plan file. After passing all 25 local questions, they deploy and run the autochecker bot which tests 34 questions total (25 shared plus 9 never-seen extras).
+The backend contains 2-3 planted non-critical bugs that produce log entries. Students iterate on their agent until it can find, trace, and diagnose these issues. Common improvements include better system prompts, improved tool descriptions, and handling of multi-step reasoning.
 
-Students update AGENT.md with the final architecture, lessons learned, and evaluation score.
+Students document their iteration process, lessons learned, and final evaluation score in AGENT.md.
 
 **Acceptance criteria:**
 
-- `run_eval.py` passes all 25 questions locally.
-- The autochecker bot benchmark passes at least 75% (26 out of 34 questions).
+- `run_eval.py` passes all local questions.
+- The autochecker bot benchmark passes at least 75%.
+- The agent successfully diagnoses at least one planted bug from logs.
 - AGENT.md documents final architecture and lessons learned.
-- Regression tests are updated with benchmark edge cases.
 - PR is approved and merged, closing the linked issue.
 
 ---
@@ -119,13 +117,13 @@ Students update AGENT.md with the final architecture, lessons learned, and evalu
 
 **Purpose:**
 
-Extend the agent with advanced capabilities that improve reliability or expand what it can answer.
+Extend the agent with advanced capabilities that improve reliability, expand coverage, or demonstrate deeper understanding of agent design.
 
 **Summary:**
 
-Students choose one or more extensions to implement: retry logic with exponential backoff for rate-limited LLM APIs, a caching layer that avoids re-calling tools for repeated questions, a `query_db` tool that runs read-only SQL queries against the PostgreSQL database directly, or multi-step reasoning where the agent plans its approach before executing tools.
+Students choose one or more extensions: retry logic with exponential backoff for rate-limited LLM APIs, a caching layer that avoids re-calling tools for repeated arguments, a `query_db` tool that runs read-only SQL queries against PostgreSQL directly, or multi-step reasoning where the agent plans before executing tools.
 
-Students document their chosen extension in a plan, implement it, and write tests that demonstrate the improvement. The extension should measurably improve the agent — either by increasing the pass rate on edge cases, reducing latency, or handling failure modes gracefully.
+Students document their chosen extension in a plan, implement it, and write tests that demonstrate the improvement. The extension should measurably improve the agent.
 
 **Acceptance criteria:**
 
